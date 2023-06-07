@@ -1,5 +1,27 @@
-import { normalizePath, Notice, Plugin, TFile, TFolder } from 'obsidian'
+import { TFile, TFolder, debounce } from 'obsidian'
 import IndexPlugin from './Plugin'
+
+export class BenchMark{
+  testN = 0
+  testT = 0
+  private lastTime = Date.now()
+  constructor(debounceTime = 1000){
+    this.out = debounce(()=>{
+      console.log(`Called in last ${debounceTime/1000} seconds: ${this.testN}, took s: ${Math.round(this.testT*1000)/ 1000} `)
+      this.testN = this.testT = 0
+    },debounceTime,true)  
+  }
+  private out :()=>void
+  
+  start(){
+    this.lastTime = Date.now()
+  }
+  end(){
+    this.testN ++
+    this.testT += (Date.now()-this.lastTime)/1000
+    this.out()
+  }
+}
 
 export const setupTests = (plugin:IndexPlugin)=>{
   plugin.addCommand({
@@ -28,11 +50,19 @@ export const setupTests = (plugin:IndexPlugin)=>{
 
       const folder = vault.getAbstractFileByPath('test-folder')
       folder instanceof TFolder && 
-        folder.children.forEach(child=>child instanceof TFile && plugin.marker.markFile(child,Date.now(),true))
-      folder instanceof TFolder && setTimeout(()=>{
-        folder.children.forEach(child=>child instanceof TFile && plugin.marker.unmarkFile(child))
-      }, 1e3*15)
+        folder.children.forEach(child=>child instanceof TFile && plugin.marker.markFile(child.path))
     }
   })
+  
+  plugin.addCommand({
+    id: 'test-unmark',
+    name: 'Index-Checker: unmark all nodes in test-folder',
+    callback: async() => {
+      const vault = plugin.app.vault
 
+      const folder = vault.getAbstractFileByPath('test-folder')
+      folder instanceof TFolder && 
+        folder.children.forEach(child=>child instanceof TFile && plugin.marker.unmarkFile(child.path))
+    }
+  })
 }

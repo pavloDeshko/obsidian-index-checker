@@ -6,3 +6,9 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+.nav-file-title.index-checker-marked{
+  color:red !important;
+}
+.nav-folder-title.index-checker-marked{
+  background-image: linear-gradient(rgba(255, 0, 0, 0.05), rgba(255, 0, 0, 0.05))
+}

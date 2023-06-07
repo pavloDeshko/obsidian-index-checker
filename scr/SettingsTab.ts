@@ -2,8 +2,10 @@ import {
 	App,
 	PluginSettingTab,
 	Setting
-} from 'obsidian';
+} from 'obsidian'
+import z from 'zod'
 import IndexPlugin from "./Plugin"
+import { MarkType } from "./Marker"
 
 const inEnum = <T extends {[s:string]:unknown}>(enm: T)=> (value:any):value is T[keyof T] =>Object.values(enm).includes(value)
 
@@ -28,7 +30,27 @@ export const placeHolders = {
 	INDEX:'[INDEX]',
 } as const
 
-export const DefaultPluginSettings = {
+
+export const PluginSettingsSchema = z
+  .object({
+    indexFileFormat: z.string().catch(placeHolders.FOLDER),
+    useRootIndexFileFormat: z.boolean().catch(false),
+    rootIndexFileFormat: z.string().catch(placeHolders.VAULT),
+    outputFileFormat: z.string().catch('_'+placeHolders.FOLDER),
+    markIndexes: z.boolean().catch(true),
+    startupCheck: z.boolean().catch(false),
+    nestedMode: z.nativeEnum(NestedModes).catch(NestedModes.NONE),
+		allFiles: z.boolean().catch(false),
+    outputMode: z.nativeEnum(OutputModes).catch(OutputModes.INDEX),
+		prependToIndex: z.boolean().catch(false),
+    outputLinksFormat: z.string().catch(`***\n${placeHolders.LINKS}\n`),
+    persistentMarks: z.array(z.tuple([z.string(),z.nativeEnum(MarkType)])).catch([]),
+    timeStamps: z.array(z.number()).catch([])
+  })
+export type IndexPluginSettings = z.infer<typeof PluginSettingsSchema>//typeof DefaultPluginSettings
+export const DefaultPluginSettings :IndexPluginSettings = PluginSettingsSchema.parse({})
+
+/* export const DefaultPluginSettings = {
 	indexFileFormat: placeHolders.FOLDER as string,
 	useRootIndexFileFormat: false,
 	rootIndexFileFormat: placeHolders.VAULT as string,
@@ -37,11 +59,10 @@ export const DefaultPluginSettings = {
 	startupCheck: false,
 	nestedMode: NestedModes.NONE,
 	outputMode: OutputModes.INDEX,
-	outputLinksFormat: `\n*********\n${placeHolders.LINKS}\n` as string,
-	persistentMarks: [] as string[]
-}
-export type IndexPluginSettings = typeof DefaultPluginSettings
-
+	outputLinksFormat: `***\n${placeHolders.LINKS}\n` as string,
+	persistentMarks: [] as string[],
+	createdTimeStamps: [] as number[]
+} */
 
 export default class IndexPluginSettingsTab extends PluginSettingTab {
 	plugin: IndexPlugin;
@@ -50,11 +71,13 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 	display(): void {
-		const settings = this.plugin.settings
-		const { containerEl } = this;
-		containerEl.empty();
+		const {settings} = this.plugin
+		const { containerEl } = this
+		containerEl.empty()
+
 
 		containerEl.createEl('h3', {text: 'Index files'})
+
 		new Setting(containerEl)
 			.setName('How your index files are named?')
 			.setDesc('Use [FOLDER] placeholder to specify current folder\'s name. Vault\'s name will be used as [FOLDER] in root directory')
@@ -62,9 +85,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.indexFileFormat)
 				.onChange(value => settings.indexFileFormat = value.trim())
 			)
-
+    
 		let rootIndexFileFormatInput :HTMLInputElement
-		const showRootIndexFileFormatInput = ()=>rootIndexFileFormatInput?.toggleVisibility(settings.useRootIndexFileFormat)
+		const showRootIndexFileFormatInput = ()=>rootIndexFileFormatInput.toggle(settings.useRootIndexFileFormat)
 		new Setting(containerEl)
 			.setName('Is index file in root folder named differently?')
 			.setDesc('You can use [VAULT] placeholder to specify vault\'s name.')
@@ -84,7 +107,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				showRootIndexFileFormatInput()
 	    })
 
+
 		containerEl.createEl('h3', { text: 'Indexing options' })
+
 		const nestedDesc = new DocumentFragment() //TODO boooeeee
 		nestedDesc.append(
 			'- no nested - index should contain links only to files in the same folder',
@@ -103,9 +128,19 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.nestedMode)
 				.onChange(value => inNestedModes(value) && (settings.nestedMode = value))
 			)
+		new Setting(containerEl)
+			.setName('Should non-notes files (like images) be linked in indexes?')
+			.setDesc('Check if all files, not just .md ones should be refereced in respective indexes.')
+			.addToggle(cmp => cmp
+				.setValue(settings.allFiles)
+				.onChange(value => settings.allFiles = value)
+			)
+
 		containerEl.createEl('br')
 
+
 		containerEl.createEl('h3', { text: 'Results output' })
+
 		new Setting(containerEl)
 			.setName('Where missing links should be added?')
 			.addDropdown(comp => comp
@@ -117,10 +152,10 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 					inOutputModes(value) && (settings.outputMode = value)
 					showOutputLinksFormatSetting()
 					showFileFormatSetting()
+					showPrependToIndexSetting()
 				})
 			)
 
-		//let addFormatSetting: HTMLElement
 		const outputLinksFormatSetting = 
 			new Setting(containerEl)
 		    .setName('How added links should be formatted?')
@@ -130,8 +165,18 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 					.onChange(value =>  settings.outputLinksFormat = value.contains('[LINKS]')? value : value+'[LINKS]')
 					.inputEl.rows = 3
 				)
-    const showOutputLinksFormatSetting = () => outputLinksFormatSetting.settingEl.toggleVisibility(!!settings.outputMode)
+    const showOutputLinksFormatSetting = () => outputLinksFormatSetting.settingEl.toggle(!!settings.outputMode)
 		showOutputLinksFormatSetting()
+
+		const prependToIndexSetting = new Setting(containerEl)
+		.setName('Prepend missing links to index file?')
+		.setDesc('If checked missing links will be added to the beginning of index file, not the end.')
+		.addToggle(cmp => cmp
+			.setValue(settings.prependToIndex)
+			.onChange(value => settings.prependToIndex = value)
+		)
+    const showPrependToIndexSetting = () => prependToIndexSetting.settingEl.toggle(settings.outputMode==OutputModes.INDEX)
+		showPrependToIndexSetting()
 			
 		const fileFormatSetting = new Setting(containerEl)
 			.setName('How separate output file should be named?')
@@ -140,19 +185,22 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.outputFileFormat)
 				.onChange(value => settings.outputFileFormat = value.trim())
 			)
-		const showFileFormatSetting = ()=>fileFormatSetting.settingEl.toggleVisibility(settings.outputMode == OutputModes.FILE)
+		const showFileFormatSetting = ()=>fileFormatSetting.settingEl.toggle(settings.outputMode == OutputModes.FILE)
 		showFileFormatSetting()
 
 		new Setting(containerEl)
-			.setName('Mark indexes which have missing links in file explorer?')
-			.setDesc('Red mark will persist until file is not touched (changed in some way).')
-			.addToggle(cmp => cmp
-				.setValue(settings.markIndexes)
-				.onChange(value => !(settings.markIndexes = value) && this.plugin.marker.unmarkAll())
-			)
+		.setName('Mark indexes which have missing links in file explorer?')
+		.setDesc('Red mark will persist until file is not touched (changed in some way).')
+		.addToggle(cmp => cmp
+			.setValue(settings.markIndexes)
+			.onChange(value => !(settings.markIndexes = value) && this.plugin.marker.unmarkAll())
+		)
+
 		containerEl.createEl('br')
 
+
 		containerEl.createEl('h3', { text: 'Validation' })
+
 		new Setting(containerEl)
 			.setName('Check indexes every time the vault is opened?')
 			.setDesc('Check on startup. Or you can trigger check manually.')
@@ -160,13 +208,15 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.startupCheck)
 				.onChange(value => settings.startupCheck = value)
 			)
+
 		new Setting(containerEl)
-			.setName('Validate now!')
-			.setDesc('You can also use a button on the left side of your screen.')
+			.setName('Check now!')
+			.setDesc('You can also use a button on the left side of your workspase.')
 			.addButton(cmp => cmp
 				.onClick(() => this.plugin.validateIndex())
 				.setIcon('folder-check')
 			)
+
 	  containerEl.createEl('br')
 	}
 }

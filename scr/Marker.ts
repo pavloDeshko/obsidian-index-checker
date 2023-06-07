@@ -1,105 +1,134 @@
-import { App, TFile, TAbstractFile, CachedMetadata } from 'obsidian'
-import uniq from 'lodash.uniq'
+import { App, TFile, LinkCache, debounce, TFolder } from 'obsidian'
+import isEqual from 'lodash.isequal'
 import IndexPlugin from './Plugin'
-/* 
-.nav-file-title-content[data-path="bar.md"]{
-  color:red;
-}*/
+import { BenchMark } from './test'
+
+const bench = process.env.NODE_ENV=='development' ? new BenchMark() :null
+
+export const MARK_CLASS_NAME = 'index-checker-marked'
+
+export enum MarkType{
+  ON_EMPTY = "ON_EMPTY",
+  ON_TOUCH = "ON_TOUCH"
+}
+
 export default class Marker {
   app: App
   plugin: IndexPlugin
-  container = {} as {element ?:Element, observer ?:MutationObserver}
-  index: Map<TFile, { element ?:HTMLElement, ignoreTimeStamp?: number, unmarkOnEmpty?: boolean }> = new Map()
+  containers: HTMLElement[] | null = []
+  observer: MutationObserver
+  index: Map<string, MarkType> = new Map()
+  foldersIndex: Set<string> = new Set()
 
   constructor(app: App, plugin: IndexPlugin) {
     this.app = app
     this.plugin = plugin
+    this.observer = new MutationObserver(() =>this.processDom())
 
-    this.app.workspace.onLayoutReady(this.setContainer)
-    this.app.workspace.onLayoutReady(()=>this.app.metadataCache.on('changed',(file,_,cache)=>this.unmarkFile(file,cache)))
-  }
-
-  private setContainer = () =>{
-    this.container.observer && this.container.observer.disconnect()
-    this.container.element = this.app.workspace.getLeavesOfType('file-explorer')[0]?.view.containerEl
-
-    if (this.container) {
-      this.container.observer = new MutationObserver((mutations) => {
-        console.log('mutation: ',mutations)
-        const addedNodes = mutations.flatMap(mutation => Array.from(mutation.addedNodes))
-        addedNodes.filter(
-          (added): added is HTMLElement => added instanceof HTMLElement && 
-            (added.classList.contains("nav-folder-children") || added.classList.contains("nav-file"))
-        ).forEach(el=>this.markRevealed(el))
-      })
-      this.container.observer.observe(this.container.element, { childList: true, subtree: true })
-    }
-  }
-
-  private getElement(path: string, sub ?:Element) {
-    this.container.element && document.body.contains(this.container.element) || this.setContainer()
-    const result = (sub || this.container.element)?.querySelector(`[data-path="${path}"]`)
-    //console.log('container', this.container, 'element:', result)
-    return result instanceof HTMLElement ? result : undefined
-  }
-/*   private hasLinks(file:TFile){
-    return !!this.app.metadataCache.getFileCache(file)?.links?.length
-  } */
-
-  private mark(element: HTMLElement) { element.style.color = 'red' }
-  private unmark(element: HTMLElement) { element.style.removeProperty('color') }
-
-  markFile(file: TFile, ignoreTimeStamp?: number, unmarkOnEmpty? :boolean) {
-    const element = this.getElement(file.path)
-    console.log('marking file: ', file, 'element: ', element)
-    element && this.mark(element)
-    this.index.set(file, {element, ignoreTimeStamp, unmarkOnEmpty})
-    return !!element
-  }
-
-  private markRevealed(sub :HTMLElement){
-    this.index.forEach((entry,key)=> {
-      const element = !entry.element && this.getElement(key.path,sub)
-      if(element){
-        console.log('marking revealed: file ',key, ' element ' ,element)
-        this.mark(element)
-        entry.element = element
-      }
+    this.app.workspace.onLayoutReady(()=>{
+      console.log('layout ready')
+      this.setContainers()
     })
+    this.app.workspace.onLayoutReady(()=>{
+      this.app.metadataCache.on('changed',(file,_,cache)=>this.tryUnmarkFile(file, cache.links))
+      this.app.vault.on('rename', file=>file instanceof TFile && this.unmarkFile(file.path))
+      this.app.vault.on('delete',file=>file instanceof TFile && this.unmarkFile(file.path))
+    })
+    this.app.workspace.on('layout-change', ()=>this.setContainers())
   }
 
-  private markAdded(elements :HTMLElement[]){
-    elements.forEach(el=>this.markRevealed(el))
-  }
+  private setContainers() {
+    const newContainers = this.app.workspace.getLeavesOfType('file-explorer').map(l => l.view.containerEl)
+    if (this.containers !== null && !isEqual(this.containers, newContainers)) {
+      this.observer.disconnect()
+      this.containers = []
 
-  unmarkFile(file: TAbstractFile, cache? :CachedMetadata) {
-    const entry = file instanceof TFile && this.index.get(file)
-    if (entry && file.stat.mtime != entry.ignoreTimeStamp && (!entry.unmarkOnEmpty || !cache?.links?.length)) {
-      console.log('UNmarking: ', entry)
-      entry.element && this.unmark(entry.element)
-      this.index.delete(file)
-      this.index.size == 0 && console.log('Marker index empty ', this.index)
-      return true
+      newContainers.forEach(element => {
+        this.observer.observe(element, { childList: true, subtree: true })
+        this.containers!.push(element)//TODO why you need ! ?
+      })
     }
-    return false
+  }
+  
+  private _mark(element: HTMLElement) { element.classList.add(MARK_CLASS_NAME)}
+  private _unmark(element: HTMLElement) { element.classList.remove(MARK_CLASS_NAME)}
+  private _isMarked(element: HTMLElement){ return  element.classList.contains(MARK_CLASS_NAME)}
+
+  private processDom = debounce(()=>{
+    //bench?.start()
+    this.containers !== null && !this.containers.length && this.setContainers()
+
+    this.containers?.forEach(c=>{
+      Array.from(c.querySelectorAll('[data-path]') || []).forEach(el=>{
+        if(!(el instanceof HTMLElement)){return}
+        
+        const path = el.dataset['path']
+        const inIndex = path !== undefined ? this.index.get(path) || this.foldersIndex.has(path) : undefined
+        const marked = this._isMarked(el)
+
+        inIndex && !marked && this._mark(el)
+        !inIndex && marked && this._unmark(el)
+      })
+    //bench?.end()
+    })
+  },50)
+
+  private process = debounce(()=>{
+    bench?.start()
+    const traverseUp =(folder:TFolder)=>{
+      if(folder.path == '/' || this.foldersIndex.has(folder.path)){
+        return
+      }
+      this.foldersIndex.add(folder.path)
+      folder.parent && traverseUp(folder.parent)
+    }
+    this.foldersIndex = new Set();
+    [...this.index.keys()].forEach(path=>{
+      const file = this.app.vault.getAbstractFileByPath(path)
+      file instanceof TFile && file.parent && traverseUp(file.parent)
+    })
+    bench?.end()
+    this.processDom()
+  },50)
+
+  private tryUnmarkFile(file: TFile, links? :LinkCache[]){
+    const type = this.index.get(file.path)
+    type && 
+      !this.plugin.settings.timeStamps.includes(file.stat.mtime) && (type==MarkType.ON_TOUCH || !links?.length) &&
+      this.unmarkFile(file.path)
+  }
+
+  markFile(path: string, unmarkType = MarkType.ON_TOUCH) {
+    this.index.set(path, unmarkType)
+    this._saveMarks()
+    this.process()
+  }
+  
+  unmarkFile(path: string){
+    this.index.delete(path)
+    this._saveMarks()
+    this.process()
   }
 
   unmarkAll() {
-    [...this.index.values()].forEach(entry => entry.element && this.unmark(entry.element))
-    this.container.observer?.disconnect()
     this.index = new Map()
+    this._saveMarks()
+    this.process()
   }
 
-  dehydrate() {
-    this.plugin.settings.persistentMarks = [...this.index.keys()].map(file => file.path)
-  }
+  _saveMarks = ()=>{
+    this.plugin.settings.persistentMarks = [...this.index.entries()]
+  }//,100, true)
+  
+  restoreMarks() {
+      this.index = new Map(this.plugin.settings.persistentMarks)
+      //console.log('marks restored:', this.index)
+      this.process()
+  } 
 
-  rehydrate() {
-    setTimeout(() =>
-      this.plugin.settings.persistentMarks.forEach(path => {
-        const file = app.vault.getAbstractFileByPath(path)
-        file instanceof TFile && this.markFile(file)
-      }) 
-    ,500)
+  cleanUp() {
+    console.log('cleaned up')
+    this.observer.disconnect()
+    this.containers = null
   }
 }

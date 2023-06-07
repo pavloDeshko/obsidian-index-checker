@@ -1,54 +1,82 @@
-import { normalizePath, Notice, Plugin, TFile, TFolder } from 'obsidian'
+import { DataWriteOptions, debounce, normalizePath, Notice, Plugin, TFile, TFolder } from 'obsidian'
 import diff from 'lodash.differencewith'
 import escapeRegExp from 'lodash.escaperegexp'
 import memoize from 'lodash.memoize'
 
-import IndexPluginSettingsTab, { IndexPluginSettings, DefaultPluginSettings, NestedModes, OutputModes, placeHolders } from "./SettingsTab"
-import Marker from './Marker'
+import IndexPluginSettingsTab, { 
+  IndexPluginSettings, 
+  PluginSettingsSchema, 
+  DefaultPluginSettings,
+  NestedModes, 
+  OutputModes, 
+  placeHolders 
+} from "./SettingsTab"
+import Marker,{MarkType} from './Marker'
 import {setupTests} from './test'
+import { link } from 'fs'
 
 export default class IndexPlugin extends Plugin {
-  settings: IndexPluginSettings = DefaultPluginSettings
+  settings: IndexPluginSettings = DefaultPluginSettings//TODO no proxy here?
   marker: Marker = new Marker(this.app, this)
 
   //////  Setup  //////
   async onload() {
-    this.settings = { ...DefaultPluginSettings, ...await this.loadData() }
+    await this.loadSettings()
 
-    this.app.workspace.onLayoutReady(() => {
-      console.log('persistent:', this.settings.persistentMarks)
-      this.settings.persistentMarks.length && this.marker.rehydrate()
-    })
+    this.addSettingTab(new IndexPluginSettingsTab(this.app, this))
 
-    this.addRibbonIcon('folder-check', 'Validate indexes', (evt: MouseEvent) => {
+    this.addRibbonIcon('folder-check', 'Check indexes', (evt: MouseEvent) => {
       this.validateIndex()
     }).addClass('index-validator-plugin-ribbon-icon')
 
-    // This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-    const statusBarItemEl = this.addStatusBarItem()
-    statusBarItemEl.setText('Status Bar Text')
-
     this.addCommand({
-      id: 'validate-indexes',
-      name: 'Index Validator Plagin: Check indexes',
+      id: 'check-indexes',
+      name: 'Check indexes',
       callback: () => {
         this.validateIndex()
       }
     })
-    process.env.NODE_ENV=='development'&&setupTests(this)
 
-    this.addSettingTab(new IndexPluginSettingsTab(this.app, this))
+    this.app.workspace.onLayoutReady(() => {
+      //console.log('persistent:', this.settings.persistentMarks)
+      this.marker.restoreMarks()
+    })
 
     this.settings.startupCheck && this.app.workspace.onLayoutReady(() => this.validateIndex())
+
+    process.env.NODE_ENV=='development'&&setupTests(this)
   }
   async onunload() {
-    this.marker.dehydrate()
-    this.marker.unmarkAll()
-    await this.saveData(this.settings)
-    console.log('saved settings: ', this.settings)
+    //this.marker.saveMarks(), 
+    this.marker.cleanUp()
+    //this.settings.timeStamps = this.settings.timeStamps.slice(-100)
+    //this.saveData(PluginSettingsSchema.parse(this.settings))
+    //console.log('saved settings: ', this.settings)
   }
 
   ////// Utils //////
+  private loadSettings = async() => {
+    try {
+      this.settings = this._makeSettingsProxy(PluginSettingsSchema.parse(await this.loadData()))
+      console.log('settings retrieved: ', this.settings)
+    } catch (e) {
+      this.settings = this._makeSettingsProxy(this.settings)
+      console.log('Error parsing settings', e)
+    }
+  }
+  private saveSettings = ()=>this.saveData(PluginSettingsSchema.parse(this.settings)) //debounce(()=>{this.saveData(PluginSettingsSchema.parse(this.settings));console.log('saved called')},100)
+  
+  private _makeSettingsProxy= (target:IndexPluginSettings)=>{
+    const debSaveSettings = debounce(()=>{this.saveSettings();console.log('saved called')},100)
+    return new Proxy(target,{
+      set:(object, key:keyof IndexPluginSettings,value)=>{
+        (object[key] as any) = value
+        debSaveSettings() //this.saveSettings()
+        return true
+      }
+    })
+  }
+
   private _getRegExp = memoize(
     (format: string, placeHolder: string, replacer: string) => {
       const replaced = format.replace(placeHolder, replacer)
@@ -70,7 +98,7 @@ export default class IndexPlugin extends Plugin {
   }
 
   private formatLinks(links: string[]) {
-    return '\n' + this.settings.outputLinksFormat.replace(placeHolders.LINKS, links.join('\n')) + '\n'//TODO replace all
+    return '\n' + this.settings.outputLinksFormat.replace(placeHolders.LINKS, links.join('\n')) +'\n'//TODO replace all
   }
 
   private formatOutputFilePath(folder :TFolder, index:TFile){
@@ -78,6 +106,11 @@ export default class IndexPlugin extends Plugin {
       .replace(placeHolders.FOLDER, folder.name || (folder.isRoot() ? this.app.vault.getName() : ''))
       .replace(placeHolders.INDEX, index.basename)}.md`
     )
+  }
+
+  private fixLink(link:string){
+    const path = link.match(/^\!?\[\]\((.+)\)$/)?.[1]
+    return path ? link.replace(/^\!?\[\]/,`[${path}]`) : link.replace(/^\!/,'')
   }
 
   //////  Main action //////
@@ -88,88 +121,97 @@ export default class IndexPlugin extends Plugin {
     folder: TFolder
   }[] = []
 
-  validateIndex(){
-    /// Build indexes ///
-    const processFolder = (folder: TFolder, upTreeIndex = false) => {
-      const vaultName = folder.isRoot() ? this.app.vault.getName() : undefined
-
-      const indexFile = folder.children.find(
-        (file): file is TFile => file instanceof TFile && this.matchIndex(file, folder, vaultName)
-      )
-      const shouldReturnChildren :boolean = upTreeIndex && (
-        this.settings.nestedMode == NestedModes.ALL ||
-        this.settings.nestedMode == NestedModes.NO_INDEX && !indexFile
-      )
-      const possibeleOutputFilePath = indexFile && this.settings.outputMode == OutputModes.FILE ? this.formatOutputFilePath(folder, indexFile) : undefined
-      
-      const anyGrandChildren :TFile[] = folder.children.filter(
-        (child): child is TFolder => child instanceof TFolder
-      ).map(
-        folder => processFolder(folder, !!indexFile || upTreeIndex)
-      ).flat()
-      
-      const children :TFile[] = indexFile || shouldReturnChildren ?
-        folder.children.filter(
-          (child): child is TFile => child instanceof TFile && child != indexFile && child.path !== possibeleOutputFilePath
-        ).concat(anyGrandChildren) :
-        []
-      
-      if (indexFile) {
-        const missingChildren = diff(
-          children,
-          Object.keys(app.metadataCache.resolvedLinks[indexFile.path]),
-          (file, link) => link === file.path
-        )
-        this.indexedFolders.push({indexFile, children, missingChildren, folder})
-      }
-      
-      return shouldReturnChildren ? children : []
-    }
-
-    this.indexedFolders = []
-    processFolder(this.app.vault.getRoot())
-    //console.log(indexedFolders)
+  private processFolder(folder: TFolder, upTreeIndex = false){
+    const indexFile = folder.children.find(
+      (file): file is TFile => file instanceof TFile && this.matchIndex(file, folder, folder.isRoot() ? this.app.vault.getName() : undefined)
+    )
+    const shouldReturnChildren :boolean = upTreeIndex && (
+      this.settings.nestedMode == NestedModes.ALL ||
+      this.settings.nestedMode == NestedModes.NO_INDEX && !indexFile
+    )
+    const optinalOutputFilePath = indexFile && this.settings.outputMode == OutputModes.FILE ? this.formatOutputFilePath(folder, indexFile) : undefined
     
+    const optinalGrandChildren :TFile[] = folder.children.filter(
+      (child): child is TFolder => child instanceof TFolder
+    ).map(
+      folder => this.processFolder(folder, !!indexFile || upTreeIndex)
+    ).flat()
+    
+    const children :TFile[] = indexFile || shouldReturnChildren ?
+      folder.children.filter(
+        (child): child is TFile => 
+          child instanceof TFile && 
+          (child.extension == 'md' || this.settings.allFiles) &&
+          child != indexFile && 
+          child.path !== optinalOutputFilePath
+      ).concat(optinalGrandChildren) :
+      []
+    
+    if (indexFile) {
+      const missingChildren = diff(
+        children,
+        Object.keys(app.metadataCache.resolvedLinks[indexFile.path]),
+        (file, link) => link === file.path
+      )
+      this.indexedFolders.push({indexFile, children, missingChildren, folder})
+    }
+    
+    return shouldReturnChildren ? children : []
+  }
+
+  validateIndex = debounce(()=>{
+    /// Build indexes ///
+    this.indexedFolders = []
+    //this.marker.unmarkAll()
+    this.processFolder(this.app.vault.getRoot())
+    //console.log(indexedFolders)
     /// Output Result ///
+    const timeStamp = Date.now()
+    this.settings.timeStamps = [...this.settings.timeStamps, timeStamp]//.push(timeStamp)
+    let nFolders = 0; let nChildren = 0
+
     this.indexedFolders.filter(folder => !!folder.missingChildren.length).forEach(async (indexedFolder) => {
       const missingLinks = indexedFolder.missingChildren.map(
-        child => this.app.fileManager.generateMarkdownLink(child, indexedFolder.indexFile.parent.path)
-      )
-      const  ignoreTimeStamp = Date.now()
-      console.log('Missing links in folder index ' + indexedFolder.indexFile.path + ' : \n', missingLinks)
-
+        child => this.app.fileManager.generateMarkdownLink(child, indexedFolder.indexFile.parent?.path || '')
+      ).map(link=>this.fixLink(link)) //TODO non-wiki link for non-notes are empty text
+  
       if (this.settings.outputMode == OutputModes.INDEX) {
-        this.app.vault.adapter.append(//why check only here?
-          indexedFolder.indexFile.path,
-          this.formatLinks(missingLinks),
-          {mtime: ignoreTimeStamp}
-        )
-        
-        this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile, ignoreTimeStamp)
+        this.addToFile(indexedFolder.indexFile,  this.formatLinks(missingLinks), timeStamp)
+        //this.app.vault.adapter.append(indexedFolder.indexFile.path, this.formatLinks(missingLinks), {mtime: timeStamp})
+        this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile.path)
 
       }else if(this.settings.outputMode == OutputModes.FILE){
         const outputFilePath = this.formatOutputFilePath(indexedFolder.folder, indexedFolder.indexFile)
-        let outputFile  = this.app.vault.getAbstractFileByPath(outputFilePath)
-        const ignoreTimeStamp = Date.now()
-        
-        outputFile instanceof TFile ? 
-          this.app.vault.modify(
-            outputFile, 
-            this.formatLinks(missingLinks), 
-            {mtime: ignoreTimeStamp}
-          ) : 
-          outputFile = await this.app.vault.create(
-            outputFilePath, 
-            this.formatLinks(missingLinks), 
-            {mtime: ignoreTimeStamp}
-          )
+        this.rewriteToFile(outputFilePath, this.formatLinks(missingLinks), {mtime: timeStamp, ctime:timeStamp})
+        this.settings.markIndexes && this.marker.markFile(outputFilePath, MarkType.ON_EMPTY)
 
-        this.settings.markIndexes && this.marker.markFile(outputFile as TFile, ignoreTimeStamp, true)//TODO as
       } else {
-        this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile, ignoreTimeStamp)
+        this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile.path)
+
       }
+      nFolders++; nChildren +=indexedFolder.missingChildren.length
     })
     //setTimeout(()=>console.log('index: ', this.indexedFolders),1000)
-    new Notice('Index validation done.')
+    new Notice(nChildren ? `Indexes checked: ${nChildren} missing links in ${nFolders} folders.` : 'Indexes checked: no missing links!' )
+    //this.saveSettings()
+  },1000, true)
+
+  private async rewriteToFile(path: string, data: string, t: DataWriteOptions) {
+    const file = this.app.vault.getAbstractFileByPath(path)
+    if (file == null) {
+      this.app.vault.create(path, data, t)
+    } else if (file instanceof TFile) {
+      if (this.settings.timeStamps.includes(file.stat.ctime)) {
+        this.app.vault.modify(file, data, { mtime: t.mtime })
+      } else {
+        await this.app.vault.trash(file, true)
+        this.app.vault.create(path, data, t)
+      }
+    }
+  }
+  private async addToFile(file:TFile, data:string, mtime: number){
+    this.app.vault.process(file, content=>{
+      return this.settings.prependToIndex ? data+content : content+data
+    },{mtime})
   }
 }
