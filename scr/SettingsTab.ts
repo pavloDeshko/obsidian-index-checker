@@ -9,6 +9,7 @@ import { MarkType } from "./Marker"
 
 const inEnum = <T extends {[s:string]:unknown}>(enm: T)=> (value:any):value is T[keyof T] =>Object.values(enm).includes(value)
 
+// How nested files should be treated. Explained in details in readme and settings
 export enum NestedModes {
 	"NONE" = '',
 	"ALL" = "ALL",
@@ -16,6 +17,7 @@ export enum NestedModes {
 }
 export const inNestedModes = inEnum(NestedModes)
 
+// Where output should go. Explained in details in readme and settings
 export enum OutputModes {
 	"NONE" = '',
 	"INDEX" = "INDEX",
@@ -23,6 +25,7 @@ export enum OutputModes {
 }
 export const inOutputModes = inEnum(OutputModes)
 
+// User can use those to inject names into matching patterns for index and output files as well as when formatting output
 export const placeHolders = {
   FOLDER:'[FOLDER]',
 	VAULT:'[VAULT]',
@@ -30,7 +33,7 @@ export const placeHolders = {
 	INDEX:'[INDEX]',
 } as const
 
-
+// Zod is used to parse plugin data and assign default.
 export const PluginSettingsSchema = z
   .object({
     indexFileFormat: z.string().catch(placeHolders.FOLDER),
@@ -45,7 +48,7 @@ export const PluginSettingsSchema = z
 		prependToIndex: z.boolean().catch(false),
     outputLinksFormat: z.string().catch(`***\n${placeHolders.LINKS}\n`),
     persistentMarks: z.array(z.tuple([z.string(),z.nativeEnum(MarkType)])).catch([]),
-    timeStamps: z.array(z.number()).catch([])
+    timeStamps: z.array(z.number()).transform(a=>a.slice(-1000)).catch([])
   })
 export type IndexPluginSettings = z.infer<typeof PluginSettingsSchema>//typeof DefaultPluginSettings
 export const DefaultPluginSettings :IndexPluginSettings = PluginSettingsSchema.parse({})
@@ -87,6 +90,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 			)
     
 		let rootIndexFileFormatInput :HTMLInputElement
+		// 'show' functions used to toggle display of some options based on other
 		const showRootIndexFileFormatInput = ()=>rootIndexFileFormatInput.toggle(settings.useRootIndexFileFormat)
 		new Setting(containerEl)
 			.setName('Is index file in root folder named differently?')
@@ -111,6 +115,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		containerEl.createEl('h3', { text: 'Indexing options' })
 
 		const nestedDesc = new DocumentFragment() //TODO boooeeee
+		// The way I found to add multiline descriptions
 		nestedDesc.append(
 			'- no nested - index should contain links only to files in the same folder',
 			createEl('br'),
