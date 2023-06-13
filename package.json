@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-index-checker",
-	"version": "0.9.0",
+	"version": "0.9.1",
 	"description": "Simple and unopinionated plugin which will ensure your index (MOC) files contain all links they should contain, while leaving structure and formatting up to you.",
 	"main": "main.js",
 	"scripts": {
