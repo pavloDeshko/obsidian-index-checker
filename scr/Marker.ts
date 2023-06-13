@@ -1,9 +1,8 @@
 import { App, TFile, LinkCache, debounce, TFolder } from 'obsidian'
 import isEqual from 'lodash.isequal'
 import IndexPlugin from './Plugin'
-import { BenchMark } from './test'
-
-const bench = process.env.NODE_ENV=='development' ? new BenchMark() :null
+//import { BenchMark } from '../utils.test'
+//const bench = process.env.NODE_ENV=='development' ? new BenchMark() :null
 
 export const MARK_CLASS_NAME = 'index-checker-marked'
 

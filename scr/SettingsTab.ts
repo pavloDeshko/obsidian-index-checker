@@ -33,27 +33,7 @@ export const placeHolders = {
 	INDEX:'[INDEX]',
 } as const
 
-// Zod is used to parse plugin data and assign default.
-export const PluginSettingsSchema = z
-  .object({
-    indexFileFormat: z.string().catch(placeHolders.FOLDER),
-    useRootIndexFileFormat: z.boolean().catch(false),
-    rootIndexFileFormat: z.string().catch(placeHolders.VAULT),
-    outputFileFormat: z.string().catch('_'+placeHolders.FOLDER),
-    markIndexes: z.boolean().catch(true),
-    startupCheck: z.boolean().catch(false),
-    nestedMode: z.nativeEnum(NestedModes).catch(NestedModes.NONE),
-		allFiles: z.boolean().catch(false),
-    outputMode: z.nativeEnum(OutputModes).catch(OutputModes.INDEX),
-		prependToIndex: z.boolean().catch(false),
-    outputLinksFormat: z.string().catch(`***\n${placeHolders.LINKS}\n`),
-    persistentMarks: z.array(z.tuple([z.string(),z.nativeEnum(MarkType)])).catch([]),
-    timeStamps: z.array(z.number()).transform(a=>a.slice(-1000)).catch([])
-  })
-export type IndexPluginSettings = z.infer<typeof PluginSettingsSchema>//typeof DefaultPluginSettings
-export const DefaultPluginSettings :IndexPluginSettings = PluginSettingsSchema.parse({})
-
-/* export const DefaultPluginSettings = {
+export const DefaultPluginSettings = {
 	indexFileFormat: placeHolders.FOLDER as string,
 	useRootIndexFileFormat: false,
 	rootIndexFileFormat: placeHolders.VAULT as string,
@@ -61,12 +41,36 @@ export const DefaultPluginSettings :IndexPluginSettings = PluginSettingsSchema.p
 	markIndexes: true,
 	startupCheck: false,
 	nestedMode: NestedModes.NONE,
+	allFiles: false,
 	outputMode: OutputModes.INDEX,
+	prependToIndex: false,
 	outputLinksFormat: `***\n${placeHolders.LINKS}\n` as string,
-	persistentMarks: [] as string[],
-	createdTimeStamps: [] as number[]
-} */
+	persistentMarks: [] as [string, MarkType][],
+	timeStamps: [] as number[]
+}
 
+// Zod is used to parse plugin data and assign default.
+	export const PluginSettingsSchema = z
+  .object({
+    indexFileFormat: z.string().catch(DefaultPluginSettings.indexFileFormat),
+    useRootIndexFileFormat: z.boolean().catch(DefaultPluginSettings.useRootIndexFileFormat),
+    rootIndexFileFormat: z.string().catch(DefaultPluginSettings.rootIndexFileFormat),
+    outputFileFormat: z.string().catch(DefaultPluginSettings.outputFileFormat),
+    markIndexes: z.boolean().catch(DefaultPluginSettings.markIndexes),
+    startupCheck: z.boolean().catch(DefaultPluginSettings.startupCheck),
+    nestedMode: z.nativeEnum(NestedModes).catch(DefaultPluginSettings.nestedMode),
+    allFiles: z.boolean().catch(DefaultPluginSettings.allFiles),
+    outputMode: z.nativeEnum(OutputModes).catch(DefaultPluginSettings.outputMode),
+    prependToIndex: z.boolean().catch(DefaultPluginSettings.prependToIndex),
+    outputLinksFormat: z.string().catch(DefaultPluginSettings.outputLinksFormat),
+    persistentMarks: z
+      .array(z.tuple([z.string(), z.nativeEnum(MarkType)])).catch(DefaultPluginSettings.persistentMarks),
+    timeStamps: z.array(z.number()).transform(a => a.slice(-1000)).catch(DefaultPluginSettings.timeStamps),
+  }).catch(DefaultPluginSettings)
+
+export type IndexPluginSettings = z.infer<typeof PluginSettingsSchema>
+
+// Plugin settings Tab
 export default class IndexPluginSettingsTab extends PluginSettingTab {
 	plugin: IndexPlugin;
 	constructor(app: App, plugin: IndexPlugin) {
@@ -78,7 +82,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		const { containerEl } = this
 		containerEl.empty()
 
-
+    /// ///
 		containerEl.createEl('h3', {text: 'Index files'})
 
 		new Setting(containerEl)
@@ -110,8 +114,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				rootIndexFileFormatInput = cmp.inputEl
 				showRootIndexFileFormatInput()
 	    })
-
-
+		containerEl.createEl('br')
+		
+    /// ///
 		containerEl.createEl('h3', { text: 'Indexing options' })
 
 		const nestedDesc = new DocumentFragment() //TODO boooeeee
@@ -140,10 +145,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.allFiles)
 				.onChange(value => settings.allFiles = value)
 			)
-
 		containerEl.createEl('br')
 
-
+    /// ///
 		containerEl.createEl('h3', { text: 'Results output' })
 
 		new Setting(containerEl)
@@ -196,14 +200,18 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		new Setting(containerEl)
 		.setName('Mark indexes which have missing links in file explorer?')
 		.setDesc('Red mark will persist until file is not touched (changed in some way).')
+		.addExtraButton(cmp => cmp
+			.onClick(() => this.plugin.marker.unmarkAll())
+			.setIcon('x')
+			.setTooltip('Clear all marks')
+		)
 		.addToggle(cmp => cmp
 			.setValue(settings.markIndexes)
 			.onChange(value => !(settings.markIndexes = value) && this.plugin.marker.unmarkAll())
 		)
-
 		containerEl.createEl('br')
 
-
+    /// ///
 		containerEl.createEl('h3', { text: 'Validation' })
 
 		new Setting(containerEl)
@@ -221,7 +229,6 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.onClick(() => this.plugin.validateIndex())
 				.setIcon('folder-check')
 			)
-
 	  containerEl.createEl('br')
 	}
 }

@@ -12,7 +12,7 @@ import IndexPluginSettingsTab, {
   placeHolders 
 } from "./SettingsTab"
 import Marker,{MarkType} from './Marker'
-import {addTestCommands} from './test'
+import {addTestCommands} from '../utils.test'
 
 export default class IndexPlugin extends Plugin {
   settings: IndexPluginSettings = DefaultPluginSettings//TODO no proxy here?

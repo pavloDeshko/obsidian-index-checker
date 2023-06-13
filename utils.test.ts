@@ -1,5 +1,5 @@
 import { TFile, TFolder, debounce } from 'obsidian'
-import IndexPlugin from './Plugin'
+import IndexPlugin from './scr/Plugin'
 
 export class BenchMark{
   testN = 0
@@ -23,10 +23,10 @@ export class BenchMark{
   }
 }
 
-export const setupTests = (plugin:IndexPlugin)=>{
+export const addTestCommands = (plugin:IndexPlugin)=>{
   plugin.addCommand({
-    id: 'test-nodes',
-    name: 'Index-Checker: create test nodes',
+    id: 'test-notes',
+    name: 'Create test notes',
     callback: async() => {
       const vault = plugin.app.vault
 
@@ -41,10 +41,10 @@ export const setupTests = (plugin:IndexPlugin)=>{
       })
     }
   })
-
+  
   plugin.addCommand({
     id: 'test-mark',
-    name: 'Index-Checker: mark all nodes in test-folder',
+    name: 'Mark all nodes in test-folder',
     callback: async() => {
       const vault = plugin.app.vault
 
@@ -56,7 +56,7 @@ export const setupTests = (plugin:IndexPlugin)=>{
   
   plugin.addCommand({
     id: 'test-unmark',
-    name: 'Index-Checker: unmark all nodes in test-folder',
+    name: 'Unmark all nodes in test-folder',
     callback: async() => {
       const vault = plugin.app.vault
 
