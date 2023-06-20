@@ -35,6 +35,14 @@ export default class IndexPlugin extends Plugin {
         this.validateIndex()
       }
     })
+    this.addCommand({
+      id: 'unmark-all',
+      name: 'Unmark all files',
+      callback: () => {
+        this.marker.unmarkAll()
+      }
+    })
+    
 
     this.app.workspace.onLayoutReady(() => {
       // Restores persistent marking of modified files
@@ -45,10 +53,6 @@ export default class IndexPlugin extends Plugin {
     this.settings.startupCheck && this.app.workspace.onLayoutReady(() => this.validateIndex())
     
     process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
-  }
-  async onunload() {
-    // Removes some DOM listeners of Marker
-    this.marker.cleanUp()
   }
 
   /// UTILS ///
@@ -78,8 +82,8 @@ export default class IndexPlugin extends Plugin {
   private _getRegExp = memoize(
     (format: string, placeHolder: string, replacer: string) => {
       const replaced = format.replace(placeHolder, replacer)
-      const useRegexInput = replaced.match(/^\/(.*)\/$/)
-      return new RegExp(useRegexInput ? useRegexInput[1] : `^${escapeRegExp(replaced)}$`)
+      const regexContent = replaced.match(/^\/(.*)\/$/)
+      return new RegExp(regexContent ? regexContent[1] : `^${escapeRegExp(replaced)}$`)
     },
     (...args) => args.join()
   )
@@ -111,8 +115,8 @@ export default class IndexPlugin extends Plugin {
   
   // Fix links to non-md files - removes '!' (embed) from the beginning and adds link text if non-wiki links are used
   private fixLink(link:string){
-    const path = link.match(/^\!?\[\]\((.+)\)$/)?.[1]
-    return path ? link.replace(/^\!?\[\]/,`[${path}]`) : link.replace(/^\!/,'')
+    const pathOnly = link.match(/^\!?\[\]\((.+)\)$/)?.[1]
+    return pathOnly ? link.replace(/^\!?\[\]/,`[${decodeURIComponent(pathOnly)}]`) : link.replace(/^\!/,'')
   }
 
   /// MAIN ACTION ///
@@ -180,7 +184,7 @@ export default class IndexPlugin extends Plugin {
     this.settings.timeStamps = [...this.settings.timeStamps, timeStamp]
     let nFolders = 0; let nChildren = 0
 
-    this.indexedFolders.filter(folder => !!folder.missingChildren.length).forEach( indexedFolder => {
+    this.indexedFolders.filter(folder => !!folder.missingChildren.length).forEach( async indexedFolder => {
       // Creates text of missing links
       const missingLinks = indexedFolder.missingChildren
         .map(child => this.app.fileManager.generateMarkdownLink(child, indexedFolder.indexFile.parent?.path || ''))
@@ -188,14 +192,14 @@ export default class IndexPlugin extends Plugin {
       
       // Ouputs result accordin to output mode and marks modified files
       if (this.settings.outputMode == OutputModes.INDEX) {
-        this.addToFile(indexedFolder.indexFile,  this.formatLinks(missingLinks), timeStamp)
+        await this.addToFile(indexedFolder.indexFile,  this.formatLinks(missingLinks), timeStamp)
         this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile.path)
 
       }else if(this.settings.outputMode == OutputModes.FILE){
         const outputFilePath = this.formatOutputFilePath(indexedFolder.folder, indexedFolder.indexFile)
-        this.rewriteToFile(outputFilePath, this.formatLinks(missingLinks), {mtime: timeStamp, ctime:timeStamp})
+        await this.rewriteToFile(outputFilePath, this.formatLinks(missingLinks), {mtime: timeStamp, ctime:timeStamp})
         this.settings.markIndexes && this.marker.markFile(outputFilePath, MarkType.ON_EMPTY)
-
+        
       } else {
         this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile.path)
 
@@ -209,22 +213,20 @@ export default class IndexPlugin extends Plugin {
   private async rewriteToFile(path: string, data: string, t: DataWriteOptions) {
     const file = this.app.vault.getAbstractFileByPath(path)
     if (file == null) {
-      this.app.vault.create(path, data, t)
+      return this.app.vault.create(path, data, t)
+    } else if (file instanceof TFile && (this.settings.timeStamps.includes(file.stat.ctime) || this.settings.timeStamps.includes(file.stat.mtime))) {
+      return this.app.vault.modify(file, data, { mtime: t.mtime })
     } else if (file instanceof TFile) {
-      if (this.settings.timeStamps.includes(file.stat.ctime) || this.settings.timeStamps.includes(file.stat.mtime)) {
-        this.app.vault.modify(file, data, { mtime: t.mtime })
-      } else {
-        // If the file that should be overwritten was not created or modified by the Plugin, its moved to trash first to avoid 
-        // accidental loss of user's data.
-        await this.app.vault.trash(file, true)
-        this.app.vault.create(path, data, t)
-      }
+      // If the file that should be overwritten was not created or modified by the Plugin, its moved to trash first to avoid 
+      // accidental loss of user's data.
+      await this.app.vault.trash(file, true)
+      return this.app.vault.create(path, data, t)
     }
   }
   
   // Used to add results to index file - append or prepend
   private async addToFile(file:TFile, data:string, mtime: number){
-    this.app.vault.process(file, content=>{
+    return this.app.vault.process(file, content=>{
       return this.settings.prependToIndex ? data+content : content+data
     },{mtime})
   }

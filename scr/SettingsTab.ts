@@ -87,7 +87,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('How your index files are named?')
-			.setDesc('Use [FOLDER] placeholder to specify current folder\'s name. Vault\'s name will be used as [FOLDER] in root directory')
+			.setDesc('Use [FOLDER] placeholder to specify current folder\'s name. Vault\'s name will be used as [FOLDER] in root directory. To use Regex input pattern as follows /.../')
 			.addText(cmp => cmp
 				.setValue(settings.indexFileFormat)
 				.onChange(value => settings.indexFileFormat = value.trim())
@@ -228,6 +228,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 			.addButton(cmp => cmp
 				.onClick(() => this.plugin.validateIndex())
 				.setIcon('folder-check')
+				.setTooltip('Check indexes now')
 			)
 	  containerEl.createEl('br')
 	}

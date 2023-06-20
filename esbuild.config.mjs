@@ -38,10 +38,13 @@ const context = await esbuild.context({
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	outfile: "main.js",
+	define: {'process.env.NODE_ENV': prod ? '"production"':'"development"'}
 });
 
 if (prod) {
-	await context.rebuild();
+	await context.rebuild({
+
+  });
 	process.exit(0);
 } else {
 	await context.watch();
