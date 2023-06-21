@@ -99,6 +99,7 @@ export default class Marker {
         if(!(el instanceof HTMLElement)){return}
         
         const path = el.dataset['path']
+        // Marks element in it's present in file's inder or in folder's inder AND is not expanded
         const inIndex = path !== undefined ? this.index.get(path) || (this.foldersIndex.has(path) && this._isCollapsed(el)) : undefined
         const marked = this._isMarked(el)
 

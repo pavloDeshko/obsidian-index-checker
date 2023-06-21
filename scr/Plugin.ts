@@ -1,4 +1,4 @@
-import { DataWriteOptions, debounce, normalizePath, Notice, Plugin, TFile, TFolder } from 'obsidian'
+import { Editor,DataWriteOptions, debounce, normalizePath, Notice, Plugin, TFile, TFolder, setIcon, ButtonComponent } from 'obsidian'
 import diff from 'lodash.differencewith'
 import escapeRegExp from 'lodash.escaperegexp'
 import memoize from 'lodash.memoize'
@@ -14,9 +14,14 @@ import IndexPluginSettingsTab, {
 import Marker,{MarkType} from './Marker'
 import {addTestCommands} from '../utils.test'
 
+const DELAY = 4e3
+
 export default class IndexPlugin extends Plugin {
   settings: IndexPluginSettings = DefaultPluginSettings//TODO no proxy here?
   marker: Marker = new Marker(this.app, this)
+
+  private workingNotice :HTMLElement | null = null
+  private lastInput = 0
 
   /// PLUGIN SETUP ///
   async onload() {
@@ -24,9 +29,11 @@ export default class IndexPlugin extends Plugin {
 
     this.addSettingTab(new IndexPluginSettingsTab(this.app, this))
 
-    this.addRibbonIcon('folder-check', 'Check indexes', (evt: MouseEvent) => {
+    const ribbonButton = this.addRibbonIcon('folder-check', 'Check indexes', (evt: MouseEvent) => {
       this.validateIndex()
-    }).addClass('index-validator-plugin-ribbon-icon')
+    })
+    ribbonButton instanceof ButtonComponent && ribbonButton.setDisabled(true)
+    //.addClass('index-validator-plugin-ribbon-icon')
 
     this.addCommand({
       id: 'check-indexes',
@@ -42,7 +49,10 @@ export default class IndexPlugin extends Plugin {
         this.marker.unmarkAll()
       }
     })
-    
+
+    // Tracks the time of last user interation with editor - used to delay check for metadata cache to update
+    this.app.workspace.on('editor-change',debounce(()=>this.lastInput = Date.now(), 100))
+        //setIcon(this.addStatusBarItem(),'loader')
 
     this.app.workspace.onLayoutReady(() => {
       // Restores persistent marking of modified files
@@ -171,8 +181,16 @@ export default class IndexPlugin extends Plugin {
     
     return shouldReturnChildren ? children : []
   }
-
-  validateIndex = debounce(()=>{
+  
+  validateIndex = ()=>{
+    // Delay check for at least 4 seconds after last input and displays 'in process' notice to be change to result later
+    if(!this.workingNotice){
+      this.workingNotice = new Notice('Checking indexes..', 30e3).noticeEl
+      const delayLeft = DELAY - (Date.now() - this.lastInput)
+      delayLeft > 0 ? setTimeout(()=>this._validateIndex(), delayLeft) : this._validateIndex()
+    }
+  }
+  _validateIndex = ()=>{
     // Build indexes
     this.indexedFolders = []
     this.processFolder(this.app.vault.getRoot())
@@ -182,9 +200,11 @@ export default class IndexPlugin extends Plugin {
     // Timestamp to be used when modifing or creating files, Lets plugin 'remember' wich files were modified/created by it
     // to avoid unmark events to be trigger by the change and for some other uses (see rewriteToFile())
     this.settings.timeStamps = [...this.settings.timeStamps, timeStamp]
-    let nFolders = 0; let nChildren = 0
 
-    this.indexedFolders.filter(folder => !!folder.missingChildren.length).forEach( async indexedFolder => {
+    const foldersWithMissing = this.indexedFolders.filter(folder => !!folder.missingChildren.length)
+    const totalMissingChildren = foldersWithMissing.reduce((n,f)=>n+f.missingChildren.length,0)
+
+    foldersWithMissing.forEach( async indexedFolder => {
       // Creates text of missing links
       const missingLinks = indexedFolder.missingChildren
         .map(child => this.app.fileManager.generateMarkdownLink(child, indexedFolder.indexFile.parent?.path || ''))
@@ -204,10 +224,12 @@ export default class IndexPlugin extends Plugin {
         this.settings.markIndexes && this.marker.markFile(indexedFolder.indexFile.path)
 
       }
-      nFolders++; nChildren +=indexedFolder.missingChildren.length
     })
-    new Notice(nChildren ? `Indexes checked: ${nChildren} missing links in ${nFolders} folders.` : 'Indexes checked: no missing links!' )
-  },1000, true)
+    // Displays resulet in Notice created when check was triggered
+    const resultMessege = totalMissingChildren ? `Indexes checked: ${totalMissingChildren} missing links in ${foldersWithMissing.length} folders.` : 'Indexes checked: no missing links!'
+    this.workingNotice instanceof HTMLElement ? this.workingNotice.setText(resultMessege) : new Notice(resultMessege, 30e3)
+    this.workingNotice = null
+  }
   
   // Used to create file or overwrite exicting file for 'separate file' output mode
   private async rewriteToFile(path: string, data: string, t: DataWriteOptions) {
