@@ -227,7 +227,7 @@ export default class IndexPlugin extends Plugin {
     })
     // Displays resulet in Notice created when check was triggered
     const resultMessege = totalMissingChildren ? `Indexes checked: ${totalMissingChildren} missing links in ${foldersWithMissing.length} folders.` : 'Indexes checked: no missing links!'
-    this.workingNotice instanceof HTMLElement ? this.workingNotice.setText(resultMessege) : new Notice(resultMessege, 30e3)
+    this.workingNotice && document.contains(this.workingNotice) ? this.workingNotice.setText(resultMessege) : new Notice(resultMessege, 30e3)
     this.workingNotice = null
   }
   
