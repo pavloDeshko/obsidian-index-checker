@@ -12,7 +12,7 @@ import IndexPluginSettingsTab, {
   placeHolders 
 } from "./SettingsTab"
 import Marker,{MarkType} from './Marker'
-import {addTestCommands} from '../utils.test'
+//import {addTestCommands} from '../utils.test'
 
 const DELAY = 4e3
 
@@ -51,8 +51,9 @@ export default class IndexPlugin extends Plugin {
     })
 
     // Tracks the time of last user interation with editor - used to delay check for metadata cache to update
-    this.app.workspace.on('editor-change',debounce(()=>this.lastInput = Date.now(), 100))
-        //setIcon(this.addStatusBarItem(),'loader')
+    this.registerEvent(
+      this.app.workspace.on('editor-change',debounce(()=>this.lastInput = Date.now(), 100))
+    )//setIcon(this.addStatusBarItem(),'loader')
 
     this.app.workspace.onLayoutReady(() => {
       // Restores persistent marking of modified files
@@ -62,7 +63,7 @@ export default class IndexPlugin extends Plugin {
     // Performs index check if it should be performed on startup
     this.settings.startupCheck && this.app.workspace.onLayoutReady(() => this.validateIndex())
     
-    process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
+    //process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
   }
 
   /// UTILS ///
@@ -183,7 +184,10 @@ export default class IndexPlugin extends Plugin {
   }
   
   validateIndex = ()=>{
-    // Delay check for at least 4 seconds after last input and displays 'in process' notice to be change to result later
+    // Postpones check until DELAY (4 seconds) has passed from last user's editor input 
+    // and displays 'in process' notice to be change to result later. Ie if no input was recorded
+    // in last 4 seconds the check is performed immidiately. Gives Obsidian some time to update cache
+    // and resolve links. 
     if(!this.workingNotice){
       this.workingNotice = new Notice('Checking indexes..', 30e3).noticeEl
       const delayLeft = DELAY - (Date.now() - this.lastInput)

@@ -3,7 +3,7 @@
 	"name": "Index Checker",
 	"version": "0.9.2",
 	"minAppVersion": "0.15.0",
-	"description": "Simple and unopinionated plugin which will ensure your index (MOC) files contain all links they should contain, while leaving structure and formatting up to you.",
+	"description": "Make sure your index (MOC) files contain all links they should contain.",
 	"author": "Pavlo Deshko",
 	"authorUrl": "https://github.com/pavloDeshko/",
 	"isDesktopOnly": false

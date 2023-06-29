@@ -29,7 +29,9 @@ export default class Marker {
     this.plugin.register(()=>this.cleanUp())
 
     this.app.workspace.onLayoutReady(()=>this.setContainers())
-    this.app.workspace.on('layout-change', ()=>this.setContainers())
+    this.plugin.registerEvent(
+      this.app.workspace.on('layout-change', ()=>this.setContainers())
+    )
 
     // Listens to events that could mean file should be unmarked
     this.app.workspace.onLayoutReady(()=>{
