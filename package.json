@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-index-checker",
-	"version": "0.9.2",
+	"version": "0.9.3",
 	"description": "Make sure your index (MOC) files contain all links they should contain.",
 	"main": "main.js",
 	"scripts": {
