@@ -142,7 +142,8 @@ export default class IndexPlugin extends Plugin {
   private processFolder(folder: TFolder, upTreeIndex = false){
     // Finds index file in a folder (if present)
     const indexFile = folder.children.find(
-      (file): file is TFile => file instanceof TFile && this.matchIndex(file, folder, folder.isRoot() ? this.app.vault.getName() : undefined)
+      (file): file is TFile => file instanceof TFile && file.extension === 'md' &&
+        this.matchIndex(file, folder, folder.isRoot() ? this.app.vault.getName() : undefined)
     )
 
     // Determines if current function call should send its children up to the caller, based on Nesteted mode setting
@@ -174,7 +175,7 @@ export default class IndexPlugin extends Plugin {
     if (indexFile) {
       const missingChildren = diff(
         children,
-        Object.keys(app.metadataCache.resolvedLinks[indexFile.path]),
+        Object.keys(this.app.metadataCache.resolvedLinks[indexFile.path]),
         (file, link) => link === file.path
       )
       this.indexedFolders.push({indexFile, children, missingChildren, folder})

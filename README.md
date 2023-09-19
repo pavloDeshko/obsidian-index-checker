@@ -12,18 +12,18 @@ ___
 
 ## How it works
 
-:hammer_and_wrench: - user defines how plugin should find index(MOC) files based on their names. Example patterns could be "__index__", "__MOC__", "__\[FOLDER\]__", "___\[FOLDER\]__" etc, where __\[FOLDER\]__ stands for containing folder's name
+- user defines how plugin should find index(MOC) files based on their names. Example patterns could be "__index__", "__MOC__", "__\[FOLDER\]__", "___\[FOLDER\]__" etc, where __\[FOLDER\]__ stands for containing folder's name
 
-:hammer_and_wrench: - _and_ user specifies which files should be referenced in given indexes. Currently there're three options: 
-  a) all files in the same folder 
-  b) all files in the folder _and_ all files in subfolders 
-  c) all files in the folder _and_ files in subfolders but only if those subfolders don't have their own indexes
+- _and_ user specifies which files should be referenced in given indexes. Currently there're three options: 
+  1. all files in the same folder 
+  2. all files in the folder _and_ all files in subfolders 
+  3. all files in the folder _and_ files in subfolders but only if those subfolders don't have their own indexes
 
-:heavy_check_mark: - plugin checks if all index(MOC) files contain all links they should contain. Check-up could be triggered manually or performed every time a vault is opened
+- plugin checks if all index(MOC) files contain all links they should contain. Check-up could be triggered manually or performed every time a vault is opened
 
-:memo: - plugin adds missing links either to the end (or start) of an index file, or to a dedicated file in the same folder, so they could be moved to their proper places in an index file. User can specify format for text of those links, like "__\*\*\* \[LINKS\] \*\*\*__" or "__\#ADDED_LINKS \[LINKS\]__", where "__\[LINKS\]__" is a plug for added links, one on each line for easy copy-pasting
+- plugin adds missing links either to the end (or start) of an index file, or to a dedicated file in the same folder, so they could be moved to their proper places in an index file. User can specify format for text of those links, like "__\*\*\* \[LINKS\] \*\*\*__" or "__\#ADDED_LINKS \[LINKS\]__", where "__\[LINKS\]__" is a plug for added links, one on each line for easy copy-pasting
 
-:crayon: - _and_ plugin marks files that had missing links in file explorer. Those marks persist until file is modified (for index files) or cleared of any links (for dedicated "missing links" file)
+- _and_ plugin marks files that had missing links in file explorer. Those marks persist until file is modified (for index files) or cleared of any links (for dedicated "missing links" file)
 
 _Check out plugin settings page after you install it for details on all options_
 ___
@@ -33,6 +33,11 @@ ___
 You're most welcome to add PR for a new feature, bug fix or simply better solution.
 
 OR make a feature request on thread at Obsidian community forum that I will create as soon as plugin is approved. Yes, I'm willing to expand functionality based on popular requests asap :)
+___
+
+## Updates
+
+0.9.4 - Fixed bug that crashed plugin if non .MD files (images, canvas, etc) had the same name as index file
 ___
 
 ## Licence
