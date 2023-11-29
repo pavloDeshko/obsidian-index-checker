@@ -2,6 +2,7 @@ import { Editor,DataWriteOptions, debounce, normalizePath, Notice, Plugin, TFile
 import diff from 'lodash.differencewith'
 import escapeRegExp from 'lodash.escaperegexp'
 import memoize from 'lodash.memoize'
+//import {CanvasData, CanvasFileData} from 'obsidian/canvas'
 
 import IndexPluginSettingsTab, { 
   IndexPluginSettings, 
@@ -89,7 +90,7 @@ export default class IndexPlugin extends Plugin {
     })
   }
   
-  // Creates regexp for every folder to check all forders files against it (to locate index file)
+/*   // Creates regexp for every folder to check all forders files against it (to locate index file)
   private _getRegExp = memoize(
     (format: string, placeHolder: string, replacer: string) => {
       const replaced = format.replace(placeHolder, replacer)
@@ -97,9 +98,27 @@ export default class IndexPlugin extends Plugin {
       return new RegExp(regexContent ? regexContent[1] : `^${escapeRegExp(replaced)}$`)
     },
     (...args) => args.join()
-  )
+  ) */
   
-  // Checks if a file is an index file
+  // Creates regex for one are multiple patterns, with placeholder and wildcard replaced
+  private getRegex = (patterns:string[], holders:Record<string,string>)=>{
+    const regsStrings = patterns.map(l=>l.trim()).filter(l=>l!=='').map((pattern:string)=>{
+      // Replace patterns regardless of it's regex or not
+      Object.keys(holders).forEach(k=>
+        pattern = pattern.replace(new RegExp(escapeRegExp(k),'g'),holders[k])
+      )
+      // Extract regexp source if user used /../
+      const regexContent =  pattern.match(/^\/(.*)\/$/)
+      // Apply * (\* after regex escape) wildcards - used only if non regex is used
+      const nonRegexContent = `^${escapeRegExp(pattern).replace(/\\\*/g,'.*')}$`
+      // return content ready to be plugged into regex
+      return regexContent ? regexContent[1] : nonRegexContent
+    })
+    console.log("regex created: ", regsStrings.length ? new RegExp(regsStrings.map(s=>'(?:'+s+')').join('|')) : null)
+    return regsStrings.length ? new RegExp(regsStrings.map(s=>'(?:'+s+')').join('|')) : null
+  }
+  
+/*   // Checks if a file is an index file
   private matchIndex(file: TFile, folder: TFolder, vaultName?: string) {
     const useVault = vaultName && this.settings.useRootIndexFileFormat
 
@@ -110,10 +129,10 @@ export default class IndexPlugin extends Plugin {
     )
     return regex.test(file.basename) || regex.test(file.name)
   }
-  
+   */
   // Formats links according to settings
   private formatLinks(links: string[]) {
-    return '\n' + this.settings.outputLinksFormat.replace(placeHolders.LINKS, links.join('\n')) +'\n'//TODO replace all
+    return '\n' + this.settings.outputLinksFormat.replace(placeHolders.LINKS, links.join('\n')) //TODO replace all
   }
   
   // Determines how separate output file should be named for a folder (used for 'separate file' output method)
@@ -140,19 +159,33 @@ export default class IndexPlugin extends Plugin {
   
   // Main function that is recurcively called for every folder in vault
   private processFolder(folder: TFolder, upTreeIndex = false){
+    // Get values for placeholders
+    type FolderHolders = {[key in typeof placeHolders[keyof typeof placeHolders]]?: string}
+    const folderHolders :FolderHolders = {
+      [placeHolders.VAULT]:this.app.vault.getName(), 
+      [placeHolders.FOLDER]: folder.isRoot() ? this.app.vault.getName() : folder.name
+    }
+
     // Finds index file in a folder (if present)
+    const _indexRegex = this.getRegex(
+      [folder.isRoot() && this.settings.useRootIndexFileFormat ? this.settings.rootIndexFileFormat : this.settings.indexFileFormat],
+      folderHolders
+    )
     const indexFile = folder.children.find(
       (file): file is TFile => file instanceof TFile && file.extension === 'md' &&
-        this.matchIndex(file, folder, folder.isRoot() ? this.app.vault.getName() : undefined)
+        (!!_indexRegex && (_indexRegex.test(file.basename) || _indexRegex.test(file.name)))
     )
+    indexFile && (folderHolders[placeHolders.INDEX] = indexFile.name)
 
     // Determines if current function call should send its children up to the caller, based on Nesteted mode setting
     const shouldReturnChildren :boolean = upTreeIndex && (
       this.settings.nestedMode == NestedModes.ALL ||
       this.settings.nestedMode == NestedModes.NO_INDEX && !indexFile
     )
+
     // Determines how separate output file (for repective output mode) should be named 
     const optinalOutputFilePath = indexFile && this.settings.outputMode == OutputModes.FILE ? this.formatOutputFilePath(folder, indexFile) : undefined
+    
     // Populates an array of childeren returned by recursive calls to nested folders (if any are returned)
     const optinalGrandChildren :TFile[] = folder.children.filter(
       (child): child is TFolder => child instanceof TFolder
@@ -160,14 +193,21 @@ export default class IndexPlugin extends Plugin {
       folder => this.processFolder(folder, !!indexFile || upTreeIndex)
     ).flat()
     
+    // Splits ignore patterns and creates regex for all of them
+    const _ignoreRegex = this.getRegex(
+      this.settings.ignorePatterns.split(/(?:\r\n|\n|\x0b|\f|\r|\x85)+/),
+      folderHolders
+    )
+    
     // Populates an array with folders children and possible grandchildren
     const children :TFile[] = indexFile || shouldReturnChildren ?
       folder.children.filter(
         (child): child is TFile => 
           child instanceof TFile && 
-          (child.extension == 'md' || this.settings.allFiles) &&
           child != indexFile && 
-          child.path !== optinalOutputFilePath
+          child.path !== optinalOutputFilePath &&
+          (child.extension == 'md' || this.settings.allFiles) &&
+          !(_ignoreRegex && (_ignoreRegex.test(child.basename) || _ignoreRegex.test(child.name))) 
       ).concat(optinalGrandChildren) :
       []
     

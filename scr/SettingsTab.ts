@@ -42,9 +42,10 @@ export const DefaultPluginSettings = {
 	startupCheck: false,
 	nestedMode: NestedModes.NONE,
 	allFiles: false,
+  ignorePatterns: "",
 	outputMode: OutputModes.INDEX,
 	prependToIndex: false,
-	outputLinksFormat: `***\n${placeHolders.LINKS}\n` as string,
+	outputLinksFormat: `***\n${placeHolders.LINKS}` as string,
 	persistentMarks: [] as [string, MarkType][],
 	timeStamps: [] as number[]
 }
@@ -60,6 +61,7 @@ export const DefaultPluginSettings = {
     startupCheck: z.boolean().catch(DefaultPluginSettings.startupCheck),
     nestedMode: z.nativeEnum(NestedModes).catch(DefaultPluginSettings.nestedMode),
     allFiles: z.boolean().catch(DefaultPluginSettings.allFiles),
+		ignorePatterns: z.string().default(""),// TODO added post factum
     outputMode: z.nativeEnum(OutputModes).catch(DefaultPluginSettings.outputMode),
     prependToIndex: z.boolean().catch(DefaultPluginSettings.prependToIndex),
     outputLinksFormat: z.string().catch(DefaultPluginSettings.outputLinksFormat),
@@ -145,6 +147,16 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 				.setValue(settings.allFiles)
 				.onChange(value => settings.allFiles = value)
 			)
+
+		new Setting(containerEl)
+		  .setName("Which files should be ignored?")
+			.setDesc("You can specify file name patterns, one for each line. Use * as wildcard and [FOLDER], [VAULT], [INDEX] for respective names. Regex can be used like this /.../ too.  ")
+			.addTextArea((cmp) => cmp
+			  .setValue(settings.ignorePatterns)
+				.onChange((value) => settings.ignorePatterns = value)
+				.setPlaceholder("draft_*\n*temp*\n_[INDEX]\netc")
+				.inputEl.rows = 4
+    )
 		containerEl.createEl('br')
 
     /// ///
@@ -153,7 +165,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Where missing links should be added?')
 			.addDropdown(comp => comp
-				.addOption(OutputModes.INDEX, '- appended to index file')
+				.addOption(OutputModes.INDEX, '- added to index file')
 			  .addOption(OutputModes.FILE, '- written to separate file')
 				.addOption(OutputModes.NONE, '- no output')
 				.setValue(settings.outputMode)
@@ -178,7 +190,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		showOutputLinksFormatSetting()
 
 		const prependToIndexSetting = new Setting(containerEl)
-		.setName('Prepend missing links to index file?')
+		.setName('Prepend (not append) missing links?')
 		.setDesc('If checked missing links will be added to the beginning of index file, not the end.')
 		.addToggle(cmp => cmp
 			.setValue(settings.prependToIndex)
