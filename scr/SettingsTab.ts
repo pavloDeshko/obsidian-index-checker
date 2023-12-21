@@ -152,9 +152,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 			.setName('Should files in nested folders be referenced in indexes?')
 		  .setDesc(nestedDesc)
 			.addDropdown(comp => comp
-				.addOption(NestedModes.NONE, 'no nested')
-				.addOption(NestedModes.NO_INDEX, 'smart nested')
-				.addOption(NestedModes.ALL, 'all nested')
+				.addOption(NestedModes.NONE, '- no nested')
+				.addOption(NestedModes.NO_INDEX, '- smart nested')
+				.addOption(NestedModes.ALL, '- all nested')
 				.setValue(settings.nestedMode)
 				.onChange(value => inNestedModes(value) && (settings.nestedMode = value))
 			)
@@ -299,7 +299,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 
 		const updateDropdown = (cmp:ExtraButtonComponent)=>{cmp
 			.setIcon(settings.canvasShowOptions ? 'chevron-up' : 'chevron-down')
-			.setTooltip(settings.canvasShowOptions ? 'Hide canvas options' : 'Show canvas options')
+			.setTooltip(settings.canvasShowOptions ? 'Hide Canvas options' : 'Show Canvas options')
 		}
 		new Setting(containerEl)
 		  .setHeading()
@@ -314,9 +314,9 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 	    })
 		
 		const canvasModeSetting = new Setting(containerEl)
-		  .setName('Where files missing in canvas indexes should go?')
+		  .setName('Where files missing in Canvas indexes should be added?')
 			.addDropdown(comp => {comp
-				.addOption('null','DEFAULT (same as all indexes)')
+				.addOption('null','DEFAULT (same as text notes)')
 				.onChange((value) => {
           settings.canvasMode = inOutputModes(value) ? value : null
 					value == OutputModes.NONE && markIndexesComponent.setValue(true)
@@ -327,7 +327,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 			})
 		const updateCanvasModeSettingDesc = ()=>{
 			canvasModeSetting.setDesc('Select DEFAULT to use the same mode as for .md (note) indexes (see option above).'+
-			(settings.canvasMode === null ? ` Currently "${outputModsOptions[settings.outputMode]}".`:'')
+			(settings.canvasMode === null ? ` Currently "${outputModsOptions[settings.outputMode].replace(' ','\u00A0')}".`:'')
 		)
 		}
 
@@ -336,7 +336,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		let canvasGroupLabelInput: HTMLInputElement
 		const updateCanvasGroupLabel = () => canvasGroupLabelInput.toggle(settings.canvasGroup)
 		const canvasGroupLabelSetting = new Setting(containerEl)
-			.setName('Should files added to .canvas index be grouped?')
+			.setName('Should files added to Canvas index be grouped?')
 			.setDesc('Recommended for easy handling. You can specify how group should be titled.')
 			.addToggle(cmp => {cmp
 				.setValue(settings.canvasGroup)
@@ -354,8 +354,8 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 			})
 
 		const canvasPositinoSetting = new Setting(containerEl)
-			.setName('Where on canvas missing files should be placed?')
-			.setDesc('You can specify location (corner) in reference to existing canvas content.')
+			.setName('Where on Canvas missing files should be placed?')
+			.setDesc('You can specify location (corner) in reference to existing Canvas content.')
 			.addDropdown(comp => comp
 				.addOption(Position.TOP_LEFT, '- top left')
 				.addOption(Position.TOP_RIGHT, '- top right')
@@ -369,7 +369,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		
 		const CanvasSizeSetting = new Setting(containerEl)
 		  .setName('What dimensions should files added to Canvas be?')
-			.setDesc('The height of 50 seems to be the minimum to accommodate the name of the file. Choose width to your liking.')
+			.setDesc('The height of 50 is currently the minimum needed for the filename to fit. Choose width to your liking.')
 			.addText(cmp =>{ cmp
 				.setValue(String(settings.canvasSize[0]))
 				.onChange(value =>{

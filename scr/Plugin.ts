@@ -11,7 +11,7 @@ import IndexPluginSettingsTab, {
 } from "./SettingsTab"
 import Marker,{MarkType} from './Marker'
 import CanvasUtils,{EMPTY_CANVAS} from './Canvas'
-import {addTestCommands} from '../utils.test'
+//import {addTestCommands} from '../utils.test'
 
 const DELAY = 5e3
 const CANVAS_DELAY = 2e3
@@ -84,8 +84,7 @@ export default class IndexPlugin extends Plugin {
     
     // Performs index check if it should be performed on startup
     this.settings.startupCheck && this.app.workspace.onLayoutReady(() => this.validateIndex())
-    
-    process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
+    //process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
   }
 
   /// UTILS ///
