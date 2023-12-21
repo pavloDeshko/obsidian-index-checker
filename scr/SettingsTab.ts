@@ -79,7 +79,7 @@ const _PluginSettingsSchema = z
 		canvasPosition:z.nativeEnum(CanvasPosition)
 		  .catch(CanvasPosition.TOP_LEFT),
 		canvasSize: z.tuple([z.number(),z.number()])
-		  .catch([50,300]),
+		  .catch([50,400]),
 		canvasMode: z.nativeEnum(OutputModes).or(z.null())
 		  .catch(null),
     persistentMarks: z.array(z.tuple([z.string(), z.nativeEnum(MarkType)]))

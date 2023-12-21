@@ -11,7 +11,7 @@ import IndexPluginSettingsTab, {
 } from "./SettingsTab"
 import Marker,{MarkType} from './Marker'
 import CanvasUtils,{EMPTY_CANVAS} from './Canvas'
-//import {addTestCommands} from '../utils.test'
+import {addTestCommands} from '../utils.test'
 
 const DELAY = 5e3
 const CANVAS_DELAY = 2e3
@@ -30,7 +30,9 @@ export enum ERROR_MESSAGES {
   WRITE_FILES = 'Seems like there\'s trouble saving results of the last index check :( Please, make sure your memory is not completly full and Index Checker plugin is updated',
   CANVAS_PARSE = 'Seems like there\'s trouble parsing(decoding) some of your .canvas index files :( Please, make sure Index Checker plugin is up to date and no program or plugin corrupts .canvas files in your Vault. Contact us if problem persists',
   CANVAS_READ = 'Seems like there\'s trouble reading some of your .canvas index files - check result might be incorrect :( Please, make sure Index Checker plugin is up to date and contact us if problem persists',
-  OTHER_SYNC = 'Seems like plugin can\'t perform index check properly :(  Please, make sure Index Checker plugin is up to date and contact us if problem persists'
+  OTHER_SYNC = 'Seems like plugin can\'t perform index check properly :(  Please, make sure Index Checker plugin is up to date and contact us if problem persists',
+  NO_INDEX = 'No Index files were found!',
+  REGEX = 'Seems like some RegExp you provided inside forward slashes  /.../ is invalid :( Double check it or contact us if problem persists'
 } 
 
 export default class IndexPlugin extends Plugin {
@@ -39,7 +41,7 @@ export default class IndexPlugin extends Plugin {
   canvas :CanvasUtils = new CanvasUtils(this.app, this)
   lastErrors : Set<ERROR_MESSAGES> = new Set()
 
-  private workingNotice :HTMLElement | null = null
+  private working :{notice:Notice, delay:number} | null = null
   private lastInput = 0
 
   /// PLUGIN SETUP ///
@@ -83,7 +85,7 @@ export default class IndexPlugin extends Plugin {
     // Performs index check if it should be performed on startup
     this.settings.startupCheck && this.app.workspace.onLayoutReady(() => this.validateIndex())
     
-    //process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
+    process.env.NODE_ENV=='development' && addTestCommands(this)//TODO remove?
   }
 
   /// UTILS ///
@@ -114,21 +116,23 @@ export default class IndexPlugin extends Plugin {
     })
   }
   
-  // Creates regex for one or multiple patterns, with placeholder and wildcard replaced
-  private getRegex = (patterns:string[], tokens:Record<string,string>)=>{
-    const regsStrings = patterns.map(l=>l.trim()).filter(l=>l!=='').map((pattern:string)=>{
+  // Creates regex for pattern, with placeholder and wildcard replaced
+  private getRegex = (pattern:string, tokens:Record<string,string>)=>{
       // Replace patterns regardless of it's regex or not
       Object.keys(tokens).forEach(k=>
-        pattern = pattern.replace(new RegExp(escapeRegExp(k),'g'),tokens[k])
+        pattern = pattern.trim().replace(new RegExp(escapeRegExp(k),'g'),tokens[k])
       )
       // Extract regexp source if user used /../
-      const regexContent =  pattern.match(/^\/(.*)\/$/)
-      // Apply * (\* after regex escape) wildcards - used only if non regex is used
+      const regexContent =  pattern.match(/^\/(.+)\/$/)
+      // Apply * (\* after regex escape) wildcards - used later only if non regex is used
       const nonRegexContent = `^${escapeRegExp(pattern).replace(/\\\*/g,'.*')}$`
-      // return content ready to be plugged into regex
-      return regexContent ? regexContent[1] : nonRegexContent
-    })
-    return regsStrings.length ? new RegExp(regsStrings.map(s=>'(?:'+s+')').join('|')) : null
+      try{
+        return new RegExp(regexContent ? regexContent[1] : nonRegexContent)
+      }catch(err){
+        console.error('Error parsing user\'s regex: ', pattern, err)
+        this.lastErrors.add(ERROR_MESSAGES.REGEX)
+        return new RegExp('^$')// fallback regex that doesn't match anything
+      }
   }
   
   // Formats links according to settings
@@ -160,19 +164,20 @@ export default class IndexPlugin extends Plugin {
       [tokens.VAULT]:this.app.vault.getName(), 
       [tokens.FOLDER]: folder.isRoot() ? this.app.vault.getName() : folder.name
     }
-    const ignoreRegex = this.getRegex(
-      this.settings.ignorePatterns.split(/(?:\r\n|\n|\x0b|\f|\r|\x85)+/),// Splits ignore patterns and creates regex for all of them
-      tokensValues
-    )
+
+    const ignoreRegexs =  this.settings.ignorePatterns
+      .split(/(?:\r\n|\n|\x0b|\f|\r|\x85)+/).map(l=>l.trim()).filter(l=>l!=='')
+      .map(p=>this.getRegex(p, tokensValues))
+    
     const indexRegex = this.getRegex(
-      [folder.isRoot() && this.settings.useRootIndexFileFormat ? this.settings.rootIndexFileFormat : this.settings.indexFileFormat],
+      folder.isRoot() && this.settings.useRootIndexFileFormat ? this.settings.rootIndexFileFormat : this.settings.indexFileFormat,
       tokensValues
     )
 
     // Finds index file in a folder (if present), if canvas index is used, optional output file paths
     const indexFiles = folder.children.filter(
       (file): file is TFile => file instanceof TFile && ['md','canvas'].includes(file.extension) &&
-        (!!indexRegex && (indexRegex.test(file.basename) || indexRegex.test(file.name)))
+        (indexRegex.test(file.basename) || indexRegex.test(file.name))
     )
     const useCanvases = indexFiles.map(index=>{
       return index.extension == 'canvas'
@@ -204,7 +209,8 @@ export default class IndexPlugin extends Plugin {
         !indexFiles.contains(child) && 
         !outputPaths.contains(child.path) &&
         (this.settings.allFiles || ['md','canvas'].includes(child.extension)) &&
-        !(ignoreRegex && (ignoreRegex.test(child.basename) || ignoreRegex.test(child.name))) 
+        !ignoreRegexs.find(r=>r.test(child.basename) || r.test(child.name))
+        //!(ignoreRegex && (ignoreRegex.test(child.basename) || ignoreRegex.test(child.name))) 
       // adds any grandchildren
       ).concat(anyGrandChildren)
 
@@ -236,11 +242,13 @@ export default class IndexPlugin extends Plugin {
     // and displays 'in process' notice to be change to result later. Ie if no input was recorded
     // in last 4 seconds the check is performed immidiately. Gives Obsidian some time to update cache
     // and resolve links. 
-    if(!this.workingNotice){// ignores if check is in progress
-      this.workingNotice = new Notice('Checking Indexes - waiting for files to catch up..', 30e3).noticeEl//also flags ongoing processing
-      const delayLeft = DELAY - (Date.now() - this.lastInput)
-      delayLeft > 0 ? setTimeout(()=>this._validateIndex(), delayLeft) : this._validateIndex()
-    }
+    if(!this.working){// ignores if check is in progress
+      const notice = new Notice('Checking Indexes - waiting for files to catch up..', 30e3)//also flags ongoing processing
+      const delay = DELAY - (Date.now() - this.lastInput)
+
+      this.working = {notice, delay : delay>0?delay:0}
+      delay > 0 ? setTimeout(()=>this._validateIndex(), delay) : this._validateIndex()
+    }// else ignore click
   }
   _validateIndex = async()=>{
     try{
@@ -253,7 +261,9 @@ export default class IndexPlugin extends Plugin {
       this.indexedFoldersP = [] //clear
       this.processFolder(this.app.vault.getRoot()) //populate with promises
       //console.log('index-checker: sync processing done in '+ String((Date.now()-timeStamp)/1000) + 's')
-      const indexedFolders =  (await Promise.all(this.indexedFoldersP)).filter((f)=>{console.log(f.index.path);return !!f.missingChildren.length}) // wait for results
+      const allIndexedFolders = await Promise.all(this.indexedFoldersP)
+      console.log(...allIndexedFolders.map(f=>f.index.path))
+      const indexedFolders = allIndexedFolders.filter((f)=>!!f.missingChildren.length) // wait for results
       //console.log('index-checker: async processing done in '+ String((Date.now()-timeStamp)/1000) + 's')
 
       // Output Result
@@ -290,18 +300,23 @@ export default class IndexPlugin extends Plugin {
       })
       // Displays resulet in Notice created when check was triggered
       const totalMissing = indexedFolders.reduce((n,f)=>n+f.missingChildren.length,0)
-      const resultMessege = totalMissing ? `Indexes checked: ${totalMissing} missing links in ${indexedFolders.length} files.` : 'Indexes checked: no missing links!'
-      
-      //TODO what if smthing fails?
-      this.workingNotice && document.contains(this.workingNotice) ? this.workingNotice.setText(resultMessege) : new Notice(resultMessege, 30e3)
-      this.workingNotice = null // 'forgets' the noticed so it's not overwritten, flags no ongoing processing
+      const resultMessege ='Indexes checked: ' + (
+        !allIndexedFolders.length ? ERROR_MESSAGES.NO_INDEX : 
+          totalMissing ? `${totalMissing} missing links in ${indexedFolders.length} files.` : 'no missing links!'
+      )
+      this.working && document.contains(this.working.notice.noticeEl) ? 
+        this.working.notice.noticeEl.setText(resultMessege) : 
+        new Notice(resultMessege, 30e3)
 
       //console.log('Index Checker: output done in '+ String((Date.now()-timeStamp)/1000) + 's')
     }catch(err){
       console.error('Error while performing sync logic: ', err)
       this.lastErrors.add(ERROR_MESSAGES.OTHER_SYNC)
+      this.working?.notice.hide() //hides wait.. notice in case of fatal sync error
     }finally{
-      [...this.lastErrors].forEach(m=>new Notice('ALERT! Index Checker Plugin:\n'+m, 0))
+      [...this.lastErrors].forEach(m=>new Notice('ALERT - Index Checker Plugin:\n'+m, 0))
+      this.working = null 
+      this.lastErrors = new Set()
     }
   }
   
@@ -351,7 +366,10 @@ export default class IndexPlugin extends Plugin {
       // Workaround for the sake of user experience. Apparently changes made to canvas 
       // doesn't trigger any immidiate events, so user input is not
       // picked up by code setting this.lastInput via 'editor-change' event. 
-      delay && await new Promise<void>(res=>setTimeout(res,CANVAS_DELAY))
+      if(delay){
+        const value = this.working ? CANVAS_DELAY - this.working.delay : CANVAS_DELAY
+        await new Promise<void>(res=>setTimeout(res, value>0 ? value : 0))
+      }
 
       const data = await this.app.vault.read(file)
       try{
