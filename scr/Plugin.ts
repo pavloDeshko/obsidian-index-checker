@@ -9,7 +9,7 @@ import IndexPluginSettingsTab, {
   OutputModes, 
   tokens 
 } from "./SettingsTab"
-import Marker,{MarkType} from './Marker'
+import Marker, {MarkType} from './Marker'
 import CanvasUtils,{EMPTY_CANVAS} from './Canvas'
 //import {addTestCommands} from '../utils.test'
 

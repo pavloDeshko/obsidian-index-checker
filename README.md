@@ -19,21 +19,21 @@ ___
 ## How it works
 
 - __Define which files in your Vault are Index(MOC) files.__  
-_Both Notes(.md) and Canvas files are supported. Simply specify how those files are named. Example patterns could be "__index__", "__MOC__", "__\[FOLDER\]__", "\___\[FOLDER\]__" etc, where __\[FOLDER\]__ stands for containing folder('s) name._
+>_Both Notes(.md) and Canvas files are supported. Simply specify how those files are named. Example patterns could be "__index__", "__MOC__", "__\[FOLDER\]__", "\___\[FOLDER\]__" etc, where __\[FOLDER\]__ stands for containing folder('s) name._  
 
 - __Then specify which files in the folder should be linked in an index.__  
-_Currently there're three options: a) all files in the same folder. b) all files in the folder _and_ all files in subfolders. c) all files in the folder _and_ files in subfolders but only if those subfolders don't have their own indexes._
+>_Currently there're three options: a) all files in the same folder. b) all files in the folder __and__ all files in subfolders. c) all files in the folder __and__ files in subfolders but only if those subfolders don't have their own indexes._
 
 - __Plugin checks if all index(MOC) files contain all links they should contain!__  
-_Check-up could be triggered manually or performed every time a vault is opened._
+>_Check-up could be triggered manually or performed every time a vault is opened._
 
-- __Then it adds missing links either to Index file or to a dedicated file.__  
-_So that later they can be moved to their proper places inside index. For .md files you can customize formatting of those links. For canvas indexes -  things like position, dimensions and grouping of cards._
+- __Then it adds missing links either to Index file or to a dedicated file (optionally).__  
+>_So that later they can be moved to their proper places inside index. For .md files you can customize formatting of those links. For canvas indexes -  things like position, dimensions and grouping of cards._
 
 - __Also files that had missing links are marked in file explorer.__  
-_Those marks persist until file is modified (for index files) or cleared of any links (for dedicated "missing links" file)._
+>_Those marks persist until file is modified (for index files) or cleared of any links (for dedicated "missing links" file)._
 
-__Check out plugin settings page after you install it for details on all options.__
+___Check out plugin settings page after you install it for details on all options.___
 ___
 
 ## Why?
@@ -50,6 +50,6 @@ ___
 
 
 
-## Licence
+## License
 
 MIT

@@ -1,7 +1,7 @@
 {
 	"name": "obsidian-index-checker",
 	"version": "1.0.0",
-	"description": "Make sure your index (MOC) files contain all links they should contain.",
+	"description": "Make sure your index \"MOC\" files (notes or Canvas) contain all links they should contain.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

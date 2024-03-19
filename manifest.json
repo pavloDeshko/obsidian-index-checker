@@ -3,7 +3,7 @@
 	"name": "Index Checker",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Make sure your index (MOC) files contain all links they should contain.",
+	"description": "Make sure your index \"MOC\" files (notes or Canvas) contain all links they should contain.",
 	"author": "Pavlo Deshko",
 	"authorUrl": "https://github.com/pavloDeshko/",
 	"isDesktopOnly": false
