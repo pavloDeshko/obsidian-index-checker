@@ -1,6 +1,6 @@
 # Obsidian Index Checker Plugin
 
-Make sure your index (MOC) files contain all links they should contain!
+Make sure your index \"MOC\" files (notes or Canvas) contain all links they should contain.
 
 Convenient and unopinionated Obsidian plugin which will check if all the necessary links are included in your index (MOC) files, while allowing you to maintain complete control over their structure and formatting.
 ___
