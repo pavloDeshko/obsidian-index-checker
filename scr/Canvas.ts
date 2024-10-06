@@ -45,7 +45,7 @@ export default class CanvasUtils{
     const UPPER_GROUP_PAD = 25
     const INTERVAL = 25
     //console.log('adding to canvas, json:', json)
-    const data :CanvasData = JSON.parse(json)
+    const data :CanvasData = JSON.parse(json.trim() || EMPTY_CANVAS)
     //console.log('parsed input: ', data)
 
     const bounds = this.findBounds(data.nodes)
@@ -92,7 +92,7 @@ export default class CanvasUtils{
   }
 
   getLinksFromCanvas = (json :string)=>{
-    const data :CanvasData =  JSON.parse(json)
+    const data :CanvasData =  JSON.parse(json.trim() || EMPTY_CANVAS)
     return data.nodes
       .filter((node):node is CanvasFileData =>node.type=='file')
       .map((node:CanvasFileData)=>normalizePath(node.file))
