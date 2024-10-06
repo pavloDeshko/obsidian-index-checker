@@ -144,7 +144,7 @@ export default class IndexPluginSettingsTab extends PluginSettingTab {
 		nestedDesc.append(
 			'- no nested - index should contain links only to files in the same folder',
 			createEl('br'),
-			'- smart nested - index should contain links to files in nested folders, but only if that folder doesn\'t have its own index ',
+			'- smart nested - index should contain links to files (or just to an index, if it\'s present) in nested folder',
 			createEl('br'),
 			'- all nested - index should contain all files down the folder tree'
 		)

@@ -6,6 +6,9 @@ Convenient and unopinionated Obsidian plugin which will check if all the necessa
 ___
 
 ## Updates
+1.1.0
+- "smart nested" mode changed a bit - now if nested folder has its own index, it (index file) should be referenced in parent index
+- bug that caused an error on empty(new) canvas index file is fixed
 
 1.0.0 
 - Added full support of Canvas index files! 

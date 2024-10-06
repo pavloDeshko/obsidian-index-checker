@@ -192,14 +192,17 @@ export default class IndexPlugin extends Plugin {
       this.settings.nestedMode == NestedModes.ALL ||
       this.settings.nestedMode == NestedModes.NO_INDEX && !indexed
     )
+    // Will make sure in smart mode nested indexes are referenced in parent indexes
+    const shouldReturnIndex :boolean = 
+      upTreeIndex && this.settings.nestedMode == NestedModes.NO_INDEX && indexed
     
     //Populates an array of childeren returned by recursive calls to nested folders (if any are returned). must be preformed every time to trigger index match for deep nested indexd folders
     const anyGrandChildren :TFile[] = 
-    folder.children.filter(
-      (child): child is TFolder =>  child instanceof TFolder
-    ).map(
-      folder => this.processFolder(folder, indexed || upTreeIndex)
-    ).flat()
+      folder.children.filter(
+        (child): child is TFolder =>  child instanceof TFolder
+      ).map(
+        folder => this.processFolder(folder, indexed || upTreeIndex)
+      ).flat()
 
     if(indexed || shouldReturnChildren){
       // Populates an array with folders children 
@@ -230,7 +233,9 @@ export default class IndexPlugin extends Plugin {
         return  {index, /*children,*/ missingChildren, folder, useCanvas, outputFilePath}
       }))
 
-      return shouldReturnChildren ? children : []
+      return shouldReturnChildren ? children : 
+        shouldReturnIndex ? indexFiles : 
+        []
     }else{
       return []
     }
@@ -261,7 +266,7 @@ export default class IndexPlugin extends Plugin {
       this.processFolder(this.app.vault.getRoot()) //populate with promises
       //console.log('index-checker: sync processing done in '+ String((Date.now()-timeStamp)/1000) + 's')
       const allIndexedFolders = await Promise.all(this.indexedFoldersP)
-      console.log(...allIndexedFolders.map(f=>f.index.path))
+      //console.log(...allIndexedFolders.map(f=>f.index.path))
       const indexedFolders = allIndexedFolders.filter((f)=>!!f.missingChildren.length) // wait for results
       //console.log('index-checker: async processing done in '+ String((Date.now()-timeStamp)/1000) + 's')
 
@@ -371,8 +376,9 @@ export default class IndexPlugin extends Plugin {
       }
 
       const data = await this.app.vault.read(file)
+      console.log('data: ', data)
       try{
-        return this.canvas.getLinksFromCanvas(data)
+        return this.canvas.getLinksFromCanvas(data) //!!data.trim() ? this.canvas.getLinksFromCanvas(data) : []
       }catch(err){
         console.error('Error parsing canvas file: ',err)
         this.lastErrors.add(ERROR_MESSAGES.CANVAS_PARSE)
