@@ -136,7 +136,7 @@ export default class IndexPlugin extends Plugin {
   
   // Formats links according to settings
   private formatLinks(links: string[]) {
-    return '\n' + this.settings.outputLinksFormat.replace(new RegExp(escapeRegExp(tokens.LINKS),'g'), links.join('\n')) 
+    return this.settings.outputLinksFormat.replace(new RegExp(escapeRegExp(tokens.LINKS),'g'), links.join('\n')) 
   }
   
   // Determines how separate output file should be named for a folder (used for 'separate file' output method)
@@ -350,7 +350,7 @@ export default class IndexPlugin extends Plugin {
   private async addToFile(file:TFile, data:string, mtime: number){
     return this.app.vault.process(
       file, 
-      content=>this.settings.prependToIndex ? data+content : content+data,
+      content=>this.settings.prependToIndex ? data+'\n'+content : content+'\n'+data,
       {mtime}
     )
   }
