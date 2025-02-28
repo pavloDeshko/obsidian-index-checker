@@ -7,7 +7,7 @@ ___
 
 ## Updates
 1.1.1
-- fixed "prepend links" default behavior - now it adds new line after missing links, not before (like append mode does)
+- fixed "prepend links" default behaviour - now it adds new line after missing links, not before (like append mode does)
 
 1.1.0
 - "smart nested" mode changed a bit - now if nested folder has its own index, it (index file) should be referenced in parent index
